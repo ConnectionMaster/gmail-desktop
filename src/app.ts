@@ -8,7 +8,8 @@ import {
   Menu,
   Tray,
   MenuItemConstructorOptions,
-  dialog
+  dialog,
+  nativeTheme
 } from 'electron'
 import { is } from 'electron-util'
 
@@ -22,9 +23,14 @@ import { init as initDebug } from './debug'
 import { init as initDownloads } from './downloads'
 import { platform, getUrlAccountId, createTrayIcon } from './helpers'
 import menu from './menu'
-import { setAppMenuBarVisibility, cleanURLFromGoogle } from './utils'
+import {
+  setAppMenuBarVisibility,
+  cleanURLFromGoogle,
+  sendChannelToMainWindow,
+  sendChannelToAllWindows
+} from './utils'
 import ensureOnline from './ensure-online'
-import { getCustomUserAgent, autoFixUserAgent } from './user-agent'
+import { autoFixUserAgent, removeCustomUserAgent } from './user-agent'
 
 import electronContextMenu = require('electron-context-menu')
 
@@ -33,6 +39,10 @@ initDownloads()
 initAutoUpdates()
 
 electronContextMenu({ showCopyImageAddress: true, showSaveImageAs: true })
+
+if (!config.get(ConfigKey.HardwareAcceleration)) {
+  app.disableHardwareAcceleration()
+}
 
 const shouldStartMinimized =
   app.commandLine.hasSwitch('launch-minimized') ||
@@ -63,6 +73,17 @@ app.on('second-instance', () => {
   }
 })
 
+switch (config.get(ConfigKey.DarkMode)) {
+  case 'system':
+    nativeTheme.themeSource = 'system'
+    break
+  case true:
+    nativeTheme.themeSource = 'dark'
+    break
+  default:
+    nativeTheme.themeSource = 'light'
+}
+
 function createWindow(): void {
   const lastWindowState = config.get(ConfigKey.LastWindowState)
 
@@ -80,7 +101,10 @@ function createWindow(): void {
       nativeWindowOpen: true,
       preload: path.join(__dirname, 'preload')
     },
-    show: !shouldStartMinimized
+    show: !shouldStartMinimized,
+    icon: is.linux
+      ? path.join(__dirname, '..', 'static', 'icon.png')
+      : undefined
   })
 
   if (lastWindowState.fullscreen && !mainWindow.isFullScreen()) {
@@ -97,6 +121,17 @@ function createWindow(): void {
 
   mainWindow.loadURL('https://mail.google.com')
 
+  mainWindow.on('app-command', (_event, command) => {
+    if (command === 'browser-backward' && mainWindow.webContents.canGoBack()) {
+      mainWindow.webContents.goBack()
+    } else if (
+      command === 'browser-forward' &&
+      mainWindow.webContents.canGoForward()
+    ) {
+      mainWindow.webContents.goForward()
+    }
+  })
+
   mainWindow.webContents.on('dom-ready', () => {
     addCustomCSS(mainWindow)
     initCustomStyles()
@@ -104,17 +139,48 @@ function createWindow(): void {
 
   mainWindow.webContents.on('did-finish-load', async () => {
     if (mainWindow.webContents.getURL().includes('signin/rejected')) {
-      const { response } = await dialog.showMessageBox({
-        type: 'info',
-        message: `It looks like you are unable to sign-in, because ${app.name} is using a non-supported user agent and Gmail is blocking it.`,
-        detail: `Do you want ${app.name} try to fix it automatically? Otherwise you can set your own user agent (see "Troubleshoot").`,
-        buttons: ['Yes', 'No', 'Troubleshoot']
-      })
-
-      if (response === 2) {
+      const message = `It looks like you are unable to sign-in, because Gmail is blocking the user agent ${app.name} is using.`
+      const askAutoFixMessage = `Do you want ${app.name} to attempt to fix it automatically?`
+      const troubleshoot = () => {
         openExternalUrl(
           'https://github.com/timche/gmail-desktop#i-cant-sign-in-this-browser-or-app-may-not-be-secure'
         )
+      }
+
+      if (config.get(ConfigKey.CustomUserAgent)) {
+        const { response } = await dialog.showMessageBox({
+          type: 'info',
+          message,
+          detail: `You're currently using a custom user agent. ${askAutoFixMessage} Alternatively you can try the default user agent or set another custom user agent (see "Troubleshoot").`,
+          buttons: ['Yes', 'Cancel', 'Use Default User Agent', 'Troubleshoot']
+        })
+
+        if (response === 3) {
+          troubleshoot()
+          return
+        }
+
+        if (response === 2) {
+          removeCustomUserAgent()
+          return
+        }
+
+        if (response === 1) {
+          return
+        }
+
+        return
+      }
+
+      const { response } = await dialog.showMessageBox({
+        type: 'info',
+        message,
+        detail: `${askAutoFixMessage} Alternatively you can set a custom user agent (see "Troubleshoot").`,
+        buttons: ['Yes', 'Cancel', 'Troubleshoot']
+      })
+
+      if (response === 2) {
+        troubleshoot()
         return
       }
 
@@ -126,22 +192,34 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('close', e => {
+  mainWindow.on('close', (error) => {
     if (!isQuitting) {
-      e.preventDefault()
+      error.preventDefault()
       mainWindow.blur()
       mainWindow.hide()
     }
   })
 
-  mainWindow.on('hide', () => toggleAppVisiblityTrayItem(false))
+  mainWindow.on('hide', () => {
+    toggleAppVisiblityTrayItem(false)
+  })
 
-  mainWindow.on('show', () => toggleAppVisiblityTrayItem(true))
+  mainWindow.on('show', () => {
+    toggleAppVisiblityTrayItem(true)
+  })
 
   function toggleAppVisiblityTrayItem(isMainWindowVisible: boolean): void {
     if (config.get(ConfigKey.EnableTrayIcon) && tray) {
-      trayContextMenu.getMenuItemById('show-win').visible = !isMainWindowVisible
-      trayContextMenu.getMenuItemById('hide-win').visible = isMainWindowVisible
+      const showWin = trayContextMenu.getMenuItemById('show-win')
+      if (showWin) {
+        showWin.visible = !isMainWindowVisible
+      }
+
+      const hideWin = trayContextMenu.getMenuItemById('hide-win')
+      if (hideWin) {
+        hideWin.visible = isMainWindowVisible
+      }
+
       tray.setContextMenu(trayContextMenu)
     }
   }
@@ -205,7 +283,7 @@ async function openExternalUrl(url: string): Promise<void> {
       const { response, checkboxChecked } = await dialog.showMessageBox({
         type: 'info',
         buttons: ['Open Link', 'Cancel'],
-        message: `Do you want to open the external link "${cleanURL}" in your default browser?`,
+        message: `Do you want to open this external link in your default browser?`,
         checkboxLabel: `Trust all links on ${origin}`,
         detail: cleanURL
       })
@@ -246,11 +324,22 @@ app.on('before-quit', () => {
 ;(async () => {
   await Promise.all([ensureOnline(), app.whenReady()])
 
-  const userAgent = await getCustomUserAgent()
+  const customUserAgent = config.get(ConfigKey.CustomUserAgent)
 
-  if (userAgent) {
-    app.userAgentFallback = userAgent
+  if (customUserAgent) {
+    app.userAgentFallback = customUserAgent
   }
+
+  ipc.handle('dark-mode', () => {
+    return nativeTheme.shouldUseDarkColors
+  })
+
+  nativeTheme.on('updated', () => {
+    sendChannelToAllWindows(
+      'dark-mode:updated',
+      nativeTheme.shouldUseDarkColors
+    )
+  })
 
   createWindow()
 
@@ -258,6 +347,40 @@ app.on('before-quit', () => {
 
   if (config.get(ConfigKey.EnableTrayIcon) && !tray) {
     const appName = app.name
+
+    const macosMenuItems: MenuItemConstructorOptions[] = is.macos
+      ? [
+          {
+            label: 'Show Dock Icon',
+            type: 'checkbox',
+            checked: config.get(ConfigKey.ShowDockIcon),
+            click({ checked }: { checked: boolean }) {
+              config.set(ConfigKey.ShowDockIcon, checked)
+
+              if (checked) {
+                app.dock.show()
+              } else {
+                app.dock.hide()
+              }
+
+              const menu = trayContextMenu.getMenuItemById('menu')
+
+              if (menu) {
+                menu.visible = !checked
+              }
+            }
+          },
+          {
+            type: 'separator'
+          },
+          {
+            id: 'menu',
+            label: 'Menu',
+            visible: !config.get(ConfigKey.ShowDockIcon),
+            submenu: Menu.getApplicationMenu()!
+          }
+        ]
+      : []
 
     const contextMenuTemplate: MenuItemConstructorOptions[] = [
       {
@@ -276,6 +399,10 @@ app.on('before-quit', () => {
         },
         id: 'hide-win'
       },
+      ...macosMenuItems,
+      {
+        type: 'separator'
+      },
       {
         role: 'quit'
       }
@@ -291,6 +418,55 @@ app.on('before-quit', () => {
         mainWindow.show()
       }
     })
+  }
+
+  if (is.macos) {
+    if (!config.get(ConfigKey.ShowDockIcon)) {
+      app.dock.hide()
+    }
+
+    const dockMenu = Menu.buildFromTemplate([
+      {
+        label: 'Compose',
+        click() {
+          mainWindow.show()
+          sendChannelToMainWindow('compose')
+        }
+      },
+      {
+        type: 'separator'
+      },
+      {
+        label: 'Inbox',
+        click() {
+          mainWindow.show()
+          sendChannelToMainWindow('inbox')
+        }
+      },
+      {
+        label: 'Snoozed',
+        click() {
+          mainWindow.show()
+          sendChannelToMainWindow('snoozed')
+        }
+      },
+      {
+        label: 'Sent',
+        click() {
+          mainWindow.show()
+          sendChannelToMainWindow('sent')
+        }
+      },
+      {
+        label: 'All Mail',
+        click() {
+          mainWindow.show()
+          sendChannelToMainWindow('all-mail')
+        }
+      }
+    ])
+
+    app.dock.setMenu(dockMenu)
   }
 
   const { webContents } = mainWindow!
@@ -363,4 +539,40 @@ app.on('before-quit', () => {
 
     openExternalUrl(url)
   })
+
+  if (config.get(ConfigKey.DarkMode) === undefined) {
+    const { response } = await dialog.showMessageBox({
+      type: 'info',
+      message: `${app.name} (now) has dark mode! Do you want to enable it?`,
+      detail:
+        'It\'s recommended to set the Gmail theme to "Default" in order for dark mode to work properly.',
+      buttons: ['Yes', 'No', 'Follow System Appearance', 'Ask Again Later']
+    })
+
+    if (response === 0) {
+      nativeTheme.themeSource = 'dark'
+      config.set(ConfigKey.DarkMode, true)
+
+      const menuItem = menu.getMenuItemById('dark-mode-enabled')
+      if (menuItem) {
+        menuItem.checked = true
+      }
+    } else if (response === 1) {
+      nativeTheme.themeSource = 'light'
+      config.set(ConfigKey.DarkMode, false)
+
+      const menuItem = menu.getMenuItemById('dark-mode-disabled')
+      if (menuItem) {
+        menuItem.checked = true
+      }
+    } else if (response === 2) {
+      nativeTheme.themeSource = 'system'
+      config.set(ConfigKey.DarkMode, 'system')
+
+      const menuItem = menu.getMenuItemById('dark-mode-system')
+      if (menuItem) {
+        menuItem.checked = true
+      }
+    }
+  }
 })()

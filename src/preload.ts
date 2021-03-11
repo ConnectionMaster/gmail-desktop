@@ -2,11 +2,14 @@ import { ipcRenderer as ipc } from 'electron'
 import log from 'electron-log'
 
 import { ConfigKey } from './config'
+import initDarkMode from './dark-mode'
 
 import elementReady = require('element-ready')
 
 const INTERVAL = 1000
 let count: number
+
+initDarkMode()
 
 function getUnreadCount(): number {
   // Find the number next to the inbox label
@@ -20,8 +23,8 @@ function getUnreadCount(): number {
     )
 
     // Return the unread count (0 by default)
-    if (label) {
-      return Number(/\d*/.exec(label.innerText))
+    if (label?.textContent) {
+      return Number(/\d*/.exec(label.textContent))
     }
   }
 
@@ -50,20 +53,24 @@ function attachButtonListeners(): void {
     'nX' // Delete
   ]
 
-  selectors.forEach(selector => {
+  for (const selector of selectors) {
     const buttonReady = elementReady(`body.xE .G-atb .${selector}`)
-    const readyTimeout = setTimeout(() => buttonReady.stop(), 10000)
+    const readyTimeout = setTimeout(() => {
+      buttonReady.stop()
+    }, 10000)
 
-    buttonReady.then(button => {
+    buttonReady.then((button) => {
       clearTimeout(readyTimeout)
 
       if (button) {
-        button.addEventListener('click', () => window.close())
+        button.addEventListener('click', () => {
+          window.close()
+        })
       } else {
         log.error(`Detect button "${selector}" timed out`)
       }
     })
-  })
+  }
 }
 
 window.addEventListener('load', () => {
@@ -95,4 +102,31 @@ ipc.on('set-custom-style', (_: Event, key: ConfigKey, enabled: boolean) => {
 // Toggle a full screen class when a message is received from the main process
 ipc.on('set-full-screen', (_: Event, enabled: boolean) => {
   document.body.classList[enabled ? 'add' : 'remove']('full-screen')
+})
+
+function clickElement(selector: string) {
+  const element = document.querySelector<HTMLDivElement>(selector)
+  if (element) {
+    element.click()
+  }
+}
+
+ipc.on('compose', () => {
+  clickElement('div[gh="cm"]')
+})
+
+ipc.on('inbox', () => {
+  clickElement('#\\:3d')
+})
+
+ipc.on('snoozed', () => {
+  clickElement('#\\:3f')
+})
+
+ipc.on('sent', () => {
+  clickElement('#\\:3i')
+})
+
+ipc.on('all-mail', () => {
+  clickElement('#\\:3l')
 })

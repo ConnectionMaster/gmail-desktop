@@ -1,25 +1,26 @@
-# <img src="media/logo.png" height="38"> Gmail Desktop
-
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/timche/gmail-desktop)
-![GitHub Release Date](https://img.shields.io/github/release-date/timche/gmail-desktop)
-![GitHub All Releases](https://img.shields.io/github/downloads/timche/gmail-desktop/total)
-[![XO Code Style](https://img.shields.io/badge/code_style-XO-5ed9c7.svg)](https://github.com/sindresorhus/xo)
-[![Styled with Prettier](https://img.shields.io/badge/styled_with-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
-
-> Nifty Gmail desktop app
-
-![](media/screenshot.png)
+<div align="center">
+	<img src="media/icon.svg" width="200" height="200">
+  <br>
+	<h1>Gmail Desktop</h1>
+	<p>
+		Nifty Gmail desktop app
+	</p>
+	<br>
+  <img src="media/preview.png">
+</div>
 
 ## Highlights
 
+- [Dark mode](#dark-mode)
 - [Appearance customizations](#appearance-customizations)
 - [Custom styles](#custom-styles)
-- Desktop notifications
-- macOS: Unread badge in dock
-- Windows/Linux: Unread icon tray
-- Silent auto-updates
 - [Clean email links from Google](#clean-email-links-from-google)
 - [Confirm email links before opening to prevent phishing](#confirm-email-links-before-opening-to-prevent-phishing)
+- [Menu bar mode](#menu-bar-mode-macos) _(macOS)_
+- Unread badge in dock _(macOS)_
+- Unread icon in tray _(Linux/Windows)_
+- Desktop notifications
+- Silent auto-updates
 - Cross-platform
 
 ## Installation
@@ -30,7 +31,7 @@ _macOS 10.13+, Linux and Windows 8+ are supported (64-bit only)._
 
 [**Download**](https://github.com/timche/gmail-desktop/releases/latest) the latest `.dmg` file.
 
-Or with [Homebrew-Cask](https://caskroom.github.io/): `brew cask install timche-gmail-desktop`
+Or with [Homebrew Cask](https://caskroom.github.io/): `brew install timche-gmail-desktop`
 
 #### Linux
 
@@ -42,60 +43,74 @@ Or with [Homebrew-Cask](https://caskroom.github.io/): `brew cask install timche-
 
 ## Features
 
-### Appearance customizations
+### Dark Mode
 
-Gmail Desktop provides a number of appearance customizations to improve and simplify the default Gmail styles. These customizations are enabled by default and configurable under the `Settings` → `Appearance` menu.
+You can configure dark mode in the `Settings` → `Dark Mode` menu.
 
-- `Compact Header`: Customizes the Gmail header to use a more compact style to provide a more native feel. This setting requires a restart to be applied.
-- `Hide Footer`: Hides footer information text (storage used, terms links, etc.).
-- `Hide Right Sidebar`: Hides the Google apps sidebar on the right side of the interface.
+<img src="media/dark-mode.png" width="650">
+
+### Appearance Customizations
+
+Gmail Desktop provides few appearance customizations to simplify the default Gmail layout and remove some clutter. These customizations are enabled by default and configurable in the `Settings` → `Appearance` menu.
+
+- `Compact Header`: Makes the Gmail header more compact to provide a more native feel.
 - `Hide Support`: Hides the support button in the header.
+- `Hide Footer`: Hides footer (storage used, terms links, etc.).
 
-![](media/appearancecustomization.gif)
+<img src="media/appearance-customization.gif" width="650">
 
-### Custom styles
+### Custom Styles
 
-In addition to the available appearance customizations, custom user styles can be applied. Click the menu item `Settings` → `Appearance` → `Custom Styles` to open the custom CSS file in the default editor for CSS files.
+If you wish to use your own styles, custom user styles can be applied. Click the menu item `Settings` → `Appearance` → `Custom Styles` to open the app custom CSS file in your default editor for CSS files.
 
-### Confirm email links before opening to prevent phishing
+### Confirm Email Links Before Opening to Prevent Phishing
 
 Confirm email links can be disabled at `Settings` → `Confirm External Links before Opening`.
 
 ![](media/confirmlinkdialog.png)
 
-### Clean email links from Google
+### Clean Email Links from Google
 
-Email links in Gmail are usually prepended with `https://google.com/url?q=<actual_url>`, which is not visible to the user. While we don't know exactly why or what it does, it's unnecesary and we believe it does some tracking stuff. Gmail Desktop automatically cleans links from this, so the actual URL will be directly opened in the browser.
+Email links in Gmail are usually prepended with `https://google.com/url?q=<actual_url>`, which is not visible to the user. While we don't know exactly why or what it does, we believe does tracking, so it's unnecesary. Gmail Desktop automatically cleans links from this, so the actual URL will be directly opened in your default browser.
+
+### Menu Bar Mode _(macOS)_
+
+You can enable the menu bar mode with `Settings` → `Show Menu Bar Icon` and remove Gmail Desktop from the dock with `Hide Dock Icon` in the menu bar icon menu.
 
 ## Troubleshooting
 
 #### I can't sign in: `This browser or app may not be secure`
 
-In December 2019 Google has decided to block unsupported user agents, such as `Electron`, from signing in to Google accounts for security reasons (related issue: [#174](https://github.com/timche/gmail-desktop/issues/174)).
+<details>
+  <summary>Read more</summary>
+
+In December 2019 Google has decided to block unsupported user agents, such as Electron, from signing in to Google accounts for security reasons (related issue: [#174](https://github.com/timche/gmail-desktop/issues/174)). This only affects some users, but not all.
 
 We doubt this will ever change, so we are required to override the Electron default user agent with a supported user agent in order to sign in successfully.
 
-Gmail Desktop offers to try to automatically fix the user agent when the issue above occurs:
+Gmail Desktop offers to attempt to automatically fix the user agent when the issue above occurs:
 
 ![](media/signinfixdialog.png)
 
-Clicking on `Yes` will restart Gmail Desktop and fetches a suitable user agent based on the OS from https://www.whatismybrowser.com/guides/the-latest-user-agent/firefox that will be set in the app config. In our experience Firefox works well and consistent across all OS.
+Clicking on `Yes` will set a [custom user agent (based on Firefox)](https://github.com/timche/gmail-desktop/blob/master/src/user-agents.json) in the app config we think should work and Gmail Desktop will be restarted.
 
-In case the user agent fix isn't working anymore, you can trigger an automatic user agent fix again in the menu `Settings` → `Advanced` → `User Agent` → `Try To Fix Automatically`
+In case the custom user agent isn't working anymore, you'll be offered to let Gmail Desktop to attempt to fix it again or trigger it manually at `Settings` → `Advanced` → `User Agent` → `Attempt User Agent Fix`.
 
-If the automatic user agent fix isn't working at all or you want to set your own user agent, you are able to override the user agent via the menu `Settings` → `Advanced` → `Edit Config File`, which opens the JSON config file in your editor.
+If the automatic user agent fix isn't working at all or you want to set your own custom user agent, you are able to set the user agent at `Settings` → `Advanced` → `User Agent` → `Set Custom User Agent`, which opens the app config in your editor.
 
-In the config file, add a new key `overrideUserAgent` and set an user agent as string (e.g. from https://www.whatismybrowser.com/guides/the-latest-user-agent).
+In the app config, edit the `customUserAgent` value with an user agent from e.g. https://www.whatismybrowser.com/guides/the-latest-user-agent.
 
-Example _(do not copy user agent)_:
+Example:
 
 ```json
 {
-  "overrideUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36"
+  "customUserAgent": "Some User Agent"
 }
 ```
 
-Save the file, restart Gmail Desktop and sign in again.
+Save the config, restart Gmail Desktop and sign in again.
+
+</details>
 
 ## Developing
 
@@ -116,8 +131,17 @@ yarn start
 #### Build
 
 ```sh
-yarn dist
+# Compile TypeScript files
+yarn compile
+
+# Build app for all targets
+yarn build
+
+# Or build app for specific target
+yarn build:<macos|linux|windows>
 ```
+
+The build output can be found in the `dist/` folder.
 
 ## Maintainers
 
@@ -149,6 +173,7 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 
 <!-- markdownlint-enable -->
 <!-- prettier-ignore-end -->
+
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
 This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!

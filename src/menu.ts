@@ -1,4 +1,11 @@
-import { app, shell, Menu, MenuItemConstructorOptions } from 'electron'
+import {
+  app,
+  shell,
+  Menu,
+  MenuItemConstructorOptions,
+  dialog,
+  nativeTheme
+} from 'electron'
 import * as fs from 'fs'
 import { is } from 'electron-util'
 
@@ -7,7 +14,7 @@ import config, { ConfigKey } from './config'
 import { setCustomStyle, USER_CUSTOM_STYLE_PATH } from './custom-styles'
 import { viewLogs } from './logs'
 import { showRestartDialog, setAppMenuBarVisibility } from './utils'
-import { autoFixUserAgent, resetUserAgent } from './user-agent'
+import { autoFixUserAgent, removeCustomUserAgent } from './user-agent'
 
 interface AppearanceMenuItem {
   key: ConfigKey
@@ -25,10 +32,6 @@ const appearanceMenuItems: AppearanceMenuItem[] = [
   {
     key: ConfigKey.HideFooter,
     label: 'Hide Footer'
-  },
-  {
-    key: ConfigKey.HideRightSidebar,
-    label: 'Hide Right Sidebar'
   },
   {
     key: ConfigKey.HideSupport,
@@ -70,7 +73,7 @@ if (is.linux || is.windows) {
   })
 }
 
-const applicationMenu: MenuItemConstructorOptions[] = [
+const appMenu: MenuItemConstructorOptions[] = [
   {
     label: app.name,
     submenu: [
@@ -117,9 +120,44 @@ const applicationMenu: MenuItemConstructorOptions[] = [
     label: 'Settings',
     submenu: [
       {
+        label: 'Dark Mode',
+        submenu: [
+          {
+            id: 'dark-mode-system',
+            label: 'Follow System Appearance',
+            type: 'radio',
+            checked: config.get(ConfigKey.DarkMode) === 'system',
+            click() {
+              nativeTheme.themeSource = 'system'
+              config.set(ConfigKey.DarkMode, 'system')
+            }
+          },
+          {
+            id: 'dark-mode-enabled',
+            label: 'Enabled',
+            type: 'radio',
+            checked: config.get(ConfigKey.DarkMode) === true,
+            click() {
+              nativeTheme.themeSource = 'dark'
+              config.set(ConfigKey.DarkMode, true)
+            }
+          },
+          {
+            id: 'dark-mode-disabled',
+            label: 'Disabled',
+            type: 'radio',
+            checked: config.get(ConfigKey.DarkMode) === false,
+            click() {
+              nativeTheme.themeSource = 'light'
+              config.set(ConfigKey.DarkMode, false)
+            }
+          }
+        ]
+      },
+      {
         label: 'Appearance',
         submenu: [
-          ...appearanceMenuItems.map(createAppearanceMenuItem),
+          ...appearanceMenuItems.map((item) => createAppearanceMenuItem(item)),
           {
             label: 'Custom Styles',
             click() {
@@ -183,6 +221,58 @@ const applicationMenu: MenuItemConstructorOptions[] = [
         }
       },
       {
+        label: 'Hardware Acceleration',
+        type: 'checkbox',
+        checked: config.get(ConfigKey.HardwareAcceleration),
+        click({ checked }: { checked: boolean }) {
+          config.set(ConfigKey.HardwareAcceleration, checked)
+          showRestartDialog(checked, 'hardware acceleration')
+        }
+      },
+      {
+        label: 'Downloads',
+        submenu: [
+          {
+            label: 'Show Save As Dialog Before Downloading',
+            type: 'checkbox',
+            checked: config.get(ConfigKey.DownloadsShowSaveAs),
+            click({ checked }) {
+              config.set(ConfigKey.DownloadsShowSaveAs, checked)
+
+              showRestartDialog()
+            }
+          },
+          {
+            label: 'Open Folder When Done',
+            type: 'checkbox',
+            checked: config.get(ConfigKey.DownloadsOpenFolderWhenDone),
+            click({ checked }) {
+              config.set(ConfigKey.DownloadsOpenFolderWhenDone, checked)
+
+              showRestartDialog()
+            }
+          },
+          {
+            label: 'Default Location',
+            async click() {
+              const { canceled, filePaths } = await dialog.showOpenDialog({
+                properties: ['openDirectory'],
+                buttonLabel: 'Select',
+                defaultPath: config.get(ConfigKey.DownloadsLocation)
+              })
+
+              if (canceled) {
+                return
+              }
+
+              config.set(ConfigKey.DownloadsLocation, filePaths[0])
+
+              showRestartDialog()
+            }
+          }
+        ]
+      },
+      {
         type: 'separator'
       },
       {
@@ -204,18 +294,36 @@ const applicationMenu: MenuItemConstructorOptions[] = [
             }
           },
           {
+            label: 'Reset Config File',
+            click() {
+              config.set(ConfigKey.ResetConfig, true)
+              showRestartDialog()
+            }
+          },
+          {
             type: 'separator'
           },
           {
             label: 'User Agent',
             submenu: [
               {
-                label: 'Try To Fix Automatically',
-                click: autoFixUserAgent
+                label: 'Attempt User Agent Fix',
+                click() {
+                  autoFixUserAgent()
+                }
               },
               {
-                label: 'Reset To Default',
-                click: resetUserAgent
+                label: 'Set Custom User Agent',
+                click() {
+                  config.openInEditor()
+                }
+              },
+              {
+                label: 'Remove Custom User Agent',
+                enabled: Boolean(config.get(ConfigKey.CustomUserAgent)),
+                click() {
+                  removeCustomUserAgent()
+                }
               }
             ]
           }
@@ -273,7 +381,7 @@ const applicationMenu: MenuItemConstructorOptions[] = [
 
 // Add the develop menu when running in the development environment
 if (is.development) {
-  applicationMenu.splice(-1, 0, {
+  appMenu.splice(-1, 0, {
     label: 'Develop',
     submenu: [
       {
@@ -290,6 +398,6 @@ if (is.development) {
   })
 }
 
-const menu = Menu.buildFromTemplate(applicationMenu)
+const menu = Menu.buildFromTemplate(appMenu)
 
 export default menu
